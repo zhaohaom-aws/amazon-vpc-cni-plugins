@@ -36,6 +36,8 @@ type NetConfig struct {
 	IgnoredGID         string
 	ProxyIngressPort   string
 	ProxyEgressPort    string
+	ProxyDNSPort       string
+	ProxyDNSProtocols  string
 	AppPorts           string
 	EgressIgnoredPorts string
 	EgressIgnoredIPv4s string
@@ -52,6 +54,8 @@ type netConfigJSON struct {
 	IgnoredGID         string   `json:"ignoredGID"`
 	ProxyIngressPort   string   `json:"proxyIngressPort"`
 	ProxyEgressPort    string   `json:"proxyEgressPort"`
+	ProxyDNSPort       string   `json:"proxyDNSPort"`
+	ProxyDNSProtocols  []string `json:"proxyDNSProtocols"`
 	AppPorts           []string `json:"appPorts"`
 	EgressIgnoredPorts []string `json:"egressIgnoredPorts"`
 	EgressIgnoredIPs   []string `json:"egressIgnoredIPs"`
@@ -90,6 +94,8 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		IgnoredGID:         config.IgnoredGID,
 		ProxyIngressPort:   config.ProxyIngressPort,
 		ProxyEgressPort:    config.ProxyEgressPort,
+		ProxyDNSPort:       config.ProxyDNSPort,
+		ProxyDNSProtocols:  strings.Join(config.ProxyDNSProtocols, splitter),
 		AppPorts:           strings.Join(config.AppPorts, splitter),
 		EgressIgnoredIPv4s: ipv4s,
 		EgressIgnoredIPv6s: ipv6s,
@@ -143,6 +149,15 @@ func validateConfig(config netConfigJSON) error {
 		return fmt.Errorf("missing parameter appPorts (required if proxyIngressPort is provided)")
 	}
 
+	// ProxyDNSPort and ProxyDNSProtocols go in pairs,
+	if config.ProxyDNSPort == "" && len(config.ProxyDNSProtocols) > 0 {
+        return fmt.Errorf("missing parameter proxyDNSPort (required if proxyDNSProtocols are provided)")
+    }
+
+	if config.ProxyDNSPort != "" && len(config.ProxyDNSProtocols) == 0 {
+        return fmt.Errorf("missing parameter proxyDNSProtocols (required if proxyDNSPort is provided)")
+    }
+
 	// Validate the format of all fields.
 	if err := isValidPort(config.ProxyEgressPort); err != nil {
 		return err
@@ -150,6 +165,9 @@ func validateConfig(config netConfigJSON) error {
 	if err := isValidPort(config.ProxyIngressPort); err != nil {
 		return err
 	}
+	if err := isValidPort(config.ProxyDNSPort); err != nil {
+        return err
+    }
 
 	for _, port := range config.AppPorts {
 		if err := isValidPort(port); err != nil {
@@ -162,6 +180,12 @@ func validateConfig(config netConfigJSON) error {
 			return err
 		}
 	}
+
+	for _, protocol := range config.ProxyDNSProtocols {
+        if err := isValidDNSProtocol(protocol); err != nil {
+            return err
+        }
+    }
 
 	return nil
 }
@@ -203,6 +227,16 @@ func isValidPort(port string) error {
 	}
 
 	return errors.Errorf("invalid port [%s] specified", port)
+}
+
+// isValidProtocol checks if the protocol is UDP or not.
+// We only support UDP right now. In the future, we may support TCP as well.
+func isValidDNSProtocol(protocol string) error {
+	if strings.ToUpper(protocol) == "UDP" {
+		return nil
+	}
+
+	return errors.Errorf("invalid protocol [%s] specified", protocol)
 }
 
 // isValidIPAddressOrCIDR checks whether the input is a valid IP addresses/CIDR block and checks the IP protocol.

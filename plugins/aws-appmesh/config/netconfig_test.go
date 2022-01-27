@@ -29,7 +29,7 @@ type config struct {
 var (
 	validConfigs = []config{
 		config{
-			netConfig: `{"ignoredUID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "appPorts":["1223","2334"], "egressIgnoredPorts":["80","81"], "egressIgnoredIPs":["216.3.128.12","216.3.128.12/24","2001:0db8:85a3:0000:0000:8a2e:0370:7334"]}`,
+			netConfig: `{"ignoredUID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "proxyDNSPort": "15053", "proxyDNSProtocols": ["UDP"], "appPorts":["1223","2334"], "egressIgnoredPorts":["80","81"], "egressIgnoredIPs":["216.3.128.12","216.3.128.12/24","2001:0db8:85a3:0000:0000:8a2e:0370:7334"]}`,
 		},
 		config{
 			netConfig: `{"ignoredUID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "appPorts":["1223","2334"], "egressIgnoredPorts":["80"], "egressIgnoredIPs":["216.3.128.12/24","2001:0db8:85a3:0000:0000:8a2e:0370:7334/32"]}`,
@@ -47,6 +47,18 @@ var (
 	}
 
 	invalidConfigs = []config{
+		config{
+			netConfig: `{"ignoredUID":"1337", "proxyEgressPort":"8000", "proxyDNSPort": "15053"}`,
+		},
+		config{
+			netConfig: `{"ignoredUID":"1337", "proxyEgressPort":"8000", "proxyDNSProtocols": ["UDP"]}`,
+		},
+		config{
+			netConfig: `{"ignoredUID":"1337", "proxyEgressPort":"8000", "proxyDNSPort": "15053", "proxyDNSProtocols": ["TCP"]}`,
+		},
+		config{
+			netConfig: `{"ignoredUID":"1337", "proxyEgressPort":"8000", "proxyDNSPort": "15053", "proxyDNSProtocols": ["UDP", "TCP"]}`,
+		},
 		config{
 			netConfig: `{"ignoredUID":"1337"}`,
 		},
@@ -97,6 +109,8 @@ func TestNew(t *testing.T) {
 	assert.Equal(t, "", config.IgnoredGID)
 	assert.Equal(t, "8080", config.ProxyIngressPort)
 	assert.Equal(t, "8000", config.ProxyEgressPort)
+	assert.Equal(t, "15053", config.ProxyDNSPort)
+	assert.Equal(t, "UDP", config.ProxyDNSProtocols)
 	assert.Equal(t, "1223,2334", config.AppPorts)
 	assert.Equal(t, "80,81", config.EgressIgnoredPorts)
 	assert.Equal(t, "216.3.128.12,216.3.128.12/24", config.EgressIgnoredIPv4s)
@@ -148,6 +162,31 @@ func TestIsValidPortWithInvalidPort(t *testing.T) {
 		assert.Equal(t, port.expectedResult, result.Error())
 	}
 
+}
+
+func TestIsValidDNSProtocolWithValidProtocol(t *testing.T) {
+	protocols := []string{"UDP", "udp"}
+	for _, protocol := range protocols {
+		result := isValidDNSProtocol(protocol)
+		assert.NoError(t, result)
+	}
+}
+
+func TestIsValidDNSProtocolWithInvalidProtocol(t *testing.T) {
+	type Protocol struct {
+		protocol           string
+		expectedResult string
+	}
+
+	protocols := []Protocol{
+		{protocol: "TCP", expectedResult: "invalid protocol [TCP] specified"},
+		{protocol: "tcp", expectedResult: "invalid protocol [tcp] specified"},
+		{protocol: "icmp", expectedResult: "invalid protocol [icmp] specified"},
+	}
+	for _, protocol := range protocols {
+		result := isValidDNSProtocol(protocol.protocol)
+		assert.Equal(t, protocol.expectedResult, result.Error())
+	}
 }
 
 func TestIsValidIPAddressOrCIDR(t *testing.T) {

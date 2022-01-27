@@ -16,6 +16,7 @@ package plugin
 import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh/config"
+	//"strings"
 
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
@@ -24,6 +25,7 @@ import (
 )
 
 const (
+	splitter  = ","
 	// Names of iptables chains created for App Mesh rules.
 	ingressChain = "APPMESH_INGRESS"
 	egressChain  = "APPMESH_EGRESS"
@@ -189,6 +191,26 @@ func (plugin *Plugin) setupEgressRules(
 		}
 	}
 
+	//// Redirect DNS request to proxyDNSPort
+	//if config.ProxyDNSPort != "" {
+	//	for _, protocol := range strings.Split(config.ProxyDNSProtocols, splitter) {
+	//		if strings.ToUpper(protocol) == "UDP" {
+	//			err = iptable.Append("nat", egressChain, "-p", "udp", "--dport", "53", "-j",
+	//				"REDIRECT", "--to", config.ProxyDNSPort)
+	//			if err != nil {
+	//				log.Errorf("Append rule to redirect traffic to ProxyDNSPort failed: %v", err)
+	//				return err
+	//			}
+	//		}
+	//	}
+	//}
+	err = iptable.Append("nat", egressChain, "-p", "udp", "--dport", "53", "-j",
+		"REDIRECT", "--to", "15002")
+	if err != nil {
+		log.Errorf("Append rule to redirect traffic to ProxyDNSPort failed: %v", err)
+		return err
+	}
+
 	// Redirect everything that is not ignored.
 	err = iptable.Append("nat", egressChain, "-p", "tcp", "-j", "REDIRECT", "--to", config.ProxyEgressPort)
 	if err != nil {
@@ -200,7 +222,13 @@ func (plugin *Plugin) setupEgressRules(
 	err = iptable.Append("nat", "OUTPUT", "-p", "tcp", "-m", "addrtype", "!", "--dst-type",
 		"LOCAL", "-j", egressChain)
 	if err != nil {
-		log.Errorf("Append rule to jump from OUTPUT to egress chain failed: %v", err)
+		log.Errorf("Append rule to redirect tcp traffic from OUTPUT to egress chain failed: %v", err)
+		return err
+	}
+	err = iptable.Append("nat", "OUTPUT", "-p", "udp", "-m", "addrtype", "!", "--dst-type",
+		"LOCAL", "-j", egressChain)
+	if err != nil {
+		log.Errorf("Append rule to redirect udp traffic from OUTPUT to egress chain failed: %v", err)
 		return err
 	}
 
@@ -298,7 +326,13 @@ func (plugin *Plugin) deleteEgressRules(iptable *iptables.IPTables) error {
 	err := iptable.Delete("nat", "OUTPUT", "-p", "tcp", "-m", "addrtype", "!", "--dst-type",
 		"LOCAL", "-j", egressChain)
 	if err != nil {
-		log.Errorf("Delete the rule in OUTPUT chain failed: %v", err)
+		log.Errorf("Delete the rule to redirect tcp traffic in OUTPUT chain failed: %v", err)
+		return err
+	}
+	err = iptable.Delete("nat", "OUTPUT", "-p", "udp", "-m", "addrtype", "!", "--dst-type",
+		"LOCAL", "-j", egressChain)
+	if err != nil {
+		log.Errorf("Delete the rule tp redirect udp traffic in OUTPUT chain failed: %v", err)
 		return err
 	}
 

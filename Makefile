@@ -176,6 +176,10 @@ vpc-branch-eni-e2e-tests: $(ALL_SOURCE_FILES) vpc-branch-eni
 vpc-tunnel-e2e-tests: $(ALL_SOURCE_FILES) vpc-tunnel
 	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test vpc_tunnel" -race -timeout 60s ./plugins/vpc-tunnel/e2eTests/
 
+.PHONY: aws-appmesh-e2e-tests
+aws-appmesh-e2e-tests: $(ALL_SOURCE_FILES) aws-appmesh
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) VPC_CNI_LOG_LEVEL=debug go test -v -tags "e2e_test aws-appmesh" -race -timeout 60s ./plugins/aws-appmesh/e2eTests/
+
 # Clean all build artifacts.
 .PHONY: clean
 clean:
